@@ -21,6 +21,8 @@ import { DndProvider } from 'react-dnd'
 import { HTML5Backend } from 'react-dnd-html5-backend'
 import { format } from 'date-fns'
 
+type ViewType = 'month' | 'week' | 'day' | 'agenda'
+
 const localizer = momentLocalizer(moment)
 
 // Set first day of week to Monday (1)
@@ -48,7 +50,7 @@ export default function AppointmentsPage() {
   })
 
   const [sendReminder, setSendReminder] = useState(true)
-  const [view, setView] = useState<'month' | 'week' | 'day' | 'agenda'>('month')
+  const [view, setView] = useState<ViewType>('month')
   const [selectedDate, setSelectedDate] = useState(new Date())
   const [selectedEvent, setSelectedEvent] = useState<Appointment | null>(null);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
@@ -291,7 +293,7 @@ export default function AppointmentsPage() {
     <DndProvider backend={HTML5Backend}>
       <div className="space-y-8">
         <h1 className="text-3xl font-bold">Appointments</h1>
-        <Tabs value={view} onValueChange={setView}>
+        <Tabs value={view} onValueChange={(value: ViewType) => setView(value)}>
           <TabsList>
             <TabsTrigger value="month">Month</TabsTrigger>
             <TabsTrigger value="week">Week</TabsTrigger>
@@ -597,7 +599,7 @@ export default function AppointmentsPage() {
                 </Label>
                 <Select
                   value={selectedEvent.type}
-                  onValueChange={(value) =>
+                  onValueChange={(value: string) =>
                     setSelectedEvent({ ...selectedEvent, type: value })
                   }
                 >
