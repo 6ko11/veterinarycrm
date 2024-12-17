@@ -238,8 +238,8 @@ export default function AppointmentsPage() {
     }
   };
 
-  const handleEventClick = (event: AppointmentType) => {
-    setSelectedEvent(event);
+  const handleEventClick = (event: object, e: React.SyntheticEvent<HTMLElement>) => {
+    setSelectedEvent(event as AppointmentType);
     setEditDialogOpen(true);
   };
 
@@ -445,6 +445,7 @@ export default function AppointmentsPage() {
                 startAccessor={(event) => (event as AppointmentType).start}
                 endAccessor={(event) => (event as AppointmentType).end}
                 onSelectSlot={handleSelectSlot}
+                onSelectEvent={handleEventClick}
                 selectable
                 resizable
                 draggable
@@ -453,7 +454,6 @@ export default function AppointmentsPage() {
                   const { event, start, end } = moveEvent;
                   handleEventResize({ event, start, end });
                 }}
-                onSelectEvent={handleEventClick}
                 defaultView="month"
                 views={['month', 'week', 'day']}
                 onNavigate={(date) => setSelectedDate(date)}
@@ -476,6 +476,7 @@ export default function AppointmentsPage() {
                 startAccessor={(event) => (event as AppointmentType).start}
                 endAccessor={(event) => (event as AppointmentType).end}
                 onSelectSlot={handleSelectSlot}
+                onSelectEvent={handleEventClick}
                 selectable
                 resizable
                 draggable
@@ -484,7 +485,6 @@ export default function AppointmentsPage() {
                   const { event, start, end } = moveEvent;
                   handleEventResize({ event, start, end });
                 }}
-                onSelectEvent={handleEventClick}
                 defaultView="week"
                 views={['month', 'week', 'day']}
                 onNavigate={(date) => setSelectedDate(date)}
@@ -507,6 +507,7 @@ export default function AppointmentsPage() {
                 startAccessor={(event) => (event as AppointmentType).start}
                 endAccessor={(event) => (event as AppointmentType).end}
                 onSelectSlot={handleSelectSlot}
+                onSelectEvent={handleEventClick}
                 selectable
                 resizable
                 draggable
@@ -515,7 +516,6 @@ export default function AppointmentsPage() {
                   const { event, start, end } = moveEvent;
                   handleEventResize({ event, start, end });
                 }}
-                onSelectEvent={handleEventClick}
                 defaultView="day"
                 views={['month', 'week', 'day']}
                 onNavigate={(date) => setSelectedDate(date)}
