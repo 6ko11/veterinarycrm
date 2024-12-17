@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Plus, Pencil, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
-import { MedicalRecord, fetchMedicalRecordsByPetId, deleteMedicalRecord } from '@/lib/medical-records'
+import { MedicalRecord, fetchMedicalRecordsByPetId, deleteMedicalRecord, createMedicalRecord, updateMedicalRecord } from '@/lib/medical-records'
 import { Pet, fetchPetsByClientId } from '@/lib/pets'
 import { Client, fetchClients } from '@/lib/clients'
 import { Button } from '@/components/ui/button'
@@ -221,8 +221,29 @@ export default function MedicalRecordsPage() {
         onClose={() => setSelectedRecord(null)}
         onSubmit={async (event) => {
           event.preventDefault()
-          setSelectedRecord(null)
-          await loadAllMedicalRecords()
+          const formData = new FormData(event.currentTarget)
+          const data = {
+            pet_id: parseInt(formData.get('pet_id') as string),
+            date: formData.get('date') as string,
+            diagnosis: formData.get('diagnosis') as string,
+            treatment: formData.get('treatment') as string,
+            notes: formData.get('notes') as string || undefined,
+          }
+
+          try {
+            if (selectedRecord?.id) {
+              await updateMedicalRecord(selectedRecord.id, data)
+              toast.success('Medical record updated successfully')
+            } else {
+              await createMedicalRecord(data)
+              toast.success('Medical record created successfully')
+            }
+            setSelectedRecord(null)
+            await loadAllMedicalRecords()
+          } catch (error) {
+            console.error('Error saving medical record:', error)
+            toast.error('Failed to save medical record')
+          }
         }}
       />
     </div>
