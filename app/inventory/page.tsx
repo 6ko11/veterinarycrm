@@ -64,7 +64,16 @@ export default function InventoryPage() {
               : 'Item updated'
           
           toast.info(message)
-          await loadInventory()
+          // Immediately update the local state based on the change
+          if (payload.eventType === 'INSERT' && payload.new) {
+            setItems(prev => [payload.new as InventoryItem, ...prev])
+          } else if (payload.eventType === 'DELETE' && payload.old) {
+            setItems(prev => prev.filter(item => item.id !== payload.old.id))
+          } else if (payload.eventType === 'UPDATE' && payload.new) {
+            setItems(prev => prev.map(item => 
+              item.id === payload.new.id ? payload.new as InventoryItem : item
+            ))
+          }
         }
       )
       .subscribe()
