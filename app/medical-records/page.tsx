@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Plus, Pencil, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
-import { MedicalRecord, fetchMedicalRecordsByPetId, deleteMedicalRecord, createMedicalRecord, updateMedicalRecord } from '@/lib/medical-records'
+import { MedicalRecord, fetchMedicalRecordsByPetId, deleteMedicalRecord, addMedicalRecord, updateMedicalRecord } from '@/lib/medical-records'
 import { Pet, fetchPetsByClientId } from '@/lib/pets'
 import { Client, fetchClients } from '@/lib/clients'
 import { Button } from '@/components/ui/button'
@@ -235,7 +235,7 @@ export default function MedicalRecordsPage() {
               await updateMedicalRecord(selectedRecord.id, data)
               toast.success('Medical record updated successfully')
             } else {
-              await createMedicalRecord(data)
+              await addMedicalRecord(data)
               toast.success('Medical record created successfully')
             }
             setSelectedRecord(null)
