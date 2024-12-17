@@ -271,6 +271,12 @@ export default function AppointmentsPage() {
     }
   };
 
+  const handleViewChange = (newView: string) => {
+    if (newView === "month" || newView === "week" || newView === "day" || newView === "agenda") {
+      setView(newView as ViewType)
+    }
+  }
+
   useEffect(() => {
     const fetchAndSetAppointments = async () => {
       const appointments = await fetchAppointments();
@@ -293,7 +299,7 @@ export default function AppointmentsPage() {
     <DndProvider backend={HTML5Backend}>
       <div className="space-y-8">
         <h1 className="text-3xl font-bold">Appointments</h1>
-        <Tabs value={view} onValueChange={(value: ViewType) => setView(value)}>
+        <Tabs value={view} onValueChange={handleViewChange}>
           <TabsList>
             <TabsTrigger value="month">Month</TabsTrigger>
             <TabsTrigger value="week">Week</TabsTrigger>
