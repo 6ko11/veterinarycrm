@@ -50,6 +50,8 @@ const formSchema = z.object({
   storage_conditions: z.string().optional(),
 })
 
+type FormData = z.infer<typeof formSchema>
+
 interface InventoryFormProps {
   item: InventoryItem | null
   open: boolean
@@ -58,7 +60,7 @@ interface InventoryFormProps {
 }
 
 export function InventoryForm({ item, open, onClose, onSubmit }: InventoryFormProps) {
-  const form = useForm<z.infer<typeof formSchema>>({
+  const form = useForm<FormData>({
     resolver: zodResolver(formSchema),
     defaultValues: {
       name: '',
@@ -69,16 +71,16 @@ export function InventoryForm({ item, open, onClose, onSubmit }: InventoryFormPr
       minimum_quantity: 0,
       purchase_price: 0,
       sale_price: 0,
-      expiry_date: undefined,
+      expiry_date: null,
       manufacturer: '',
       supplier: '',
       storage_conditions: '',
-    }
+    },
   })
 
   useEffect(() => {
     if (item) {
-      form.reset({
+      const formData: FormData = {
         name: item.name,
         type: item.type,
         description: item.description || '',
@@ -87,11 +89,12 @@ export function InventoryForm({ item, open, onClose, onSubmit }: InventoryFormPr
         minimum_quantity: item.minimum_quantity,
         purchase_price: item.purchase_price,
         sale_price: item.sale_price,
-        expiry_date: item.expiry_date ? new Date(item.expiry_date) : undefined,
+        expiry_date: item.expiry_date ? new Date(item.expiry_date) : null,
         manufacturer: item.manufacturer || '',
         supplier: item.supplier || '',
         storage_conditions: item.storage_conditions || '',
-      })
+      }
+      form.reset(formData)
     } else {
       form.reset({
         name: '',
@@ -102,7 +105,7 @@ export function InventoryForm({ item, open, onClose, onSubmit }: InventoryFormPr
         minimum_quantity: 0,
         purchase_price: 0,
         sale_price: 0,
-        expiry_date: undefined,
+        expiry_date: null,
         manufacturer: '',
         supplier: '',
         storage_conditions: '',
@@ -110,14 +113,21 @@ export function InventoryForm({ item, open, onClose, onSubmit }: InventoryFormPr
     }
   }, [item, form])
 
+  const handleSubmit = (data: FormData) => {
+    onSubmit({
+      ...data,
+      expiry_date: data.expiry_date?.toISOString().split('T')[0] || null,
+    })
+  }
+
   return (
     <Dialog open={open} onOpenChange={onClose}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>{item ? 'Edit' : 'Add'} Inventory Item</DialogTitle>
+          <DialogTitle>{item ? 'Edit Item' : 'Add Item'}</DialogTitle>
         </DialogHeader>
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+          <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-6">
             <div className="grid grid-cols-2 gap-4">
               <FormField
                 control={form.control}
@@ -253,8 +263,9 @@ export function InventoryForm({ item, open, onClose, onSubmit }: InventoryFormPr
                       <div className="relative">
                         <ReactDatePicker
                           selected={field.value}
-                          onChange={(date: Date) => field.onChange(date)}
+                          onChange={(date: Date | null) => field.onChange(date)}
                           dateFormat="PPP"
+                          isClearable
                           minDate={new Date()}
                           placeholderText="Pick a date"
                           className={cn(

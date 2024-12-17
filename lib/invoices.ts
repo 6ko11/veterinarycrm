@@ -1,17 +1,7 @@
 import { supabase } from './supabase'
+import { Invoice as PatientFlowInvoice } from './patient-flow'
 
-export interface Invoice {
-  id: number
-  date: string
-  total: number
-  status: 'pending' | 'paid' | 'cancelled'
-  client_id: number
-  pet_id: number
-  user_id: string
-  created_at: string
-  updated_at: string
-  items?: InvoiceItem[]
-}
+export type Invoice = PatientFlowInvoice
 
 export interface InvoiceItem {
   id: number

@@ -227,7 +227,7 @@ export default function InventoryPage() {
                   <TableCell className={cn(
                     isExpiringSoon(item) && "text-red-500 font-medium"
                   )}>
-                    {formatDate(item.expiry_date)}
+                    {formatDate(item.expiry_date || null)}
                     {isExpiringSoon(item) && (
                       <AlertTriangle className="inline ml-2 h-4 w-4" />
                     )}

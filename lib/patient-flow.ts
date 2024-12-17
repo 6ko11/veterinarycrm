@@ -141,7 +141,7 @@ export async function fetchPets(clientId?: number) {
 
   // Fetch clients for the pets
   if (pets && pets.length > 0) {
-    const clientIds = [...new Set(pets.map(pet => pet.client_id))]
+    const clientIds = Array.from(new Set(pets.map(pet => pet.client_id)))
     const { data: clients, error: clientsError } = await supabase
       .from('clients')
       .select('*')
@@ -228,7 +228,7 @@ export async function fetchMedicalRecords(petId?: number) {
 
   // Fetch pets and clients for the records
   if (records && records.length > 0) {
-    const petIds = [...new Set(records.map(record => record.pet_id))]
+    const petIds = Array.from(new Set(records.map(record => record.pet_id)))
     const { data: pets, error: petsError } = await supabase
       .from('pets')
       .select('*')
@@ -240,7 +240,7 @@ export async function fetchMedicalRecords(petId?: number) {
     }
 
     if (pets && pets.length > 0) {
-      const clientIds = [...new Set(pets.map(pet => pet.client_id))]
+      const clientIds = Array.from(new Set(pets.map(pet => pet.client_id)))
       const { data: clients, error: clientsError } = await supabase
         .from('clients')
         .select('*')
@@ -336,7 +336,7 @@ export async function fetchInvoices(clientId?: number) {
 
   if (invoices && invoices.length > 0) {
     // Fetch clients
-    const clientIds = [...new Set(invoices.map(invoice => invoice.client_id))]
+    const clientIds = Array.from(new Set(invoices.map(invoice => invoice.client_id)))
     const { data: clients, error: clientsError } = await supabase
       .from('clients')
       .select('*')
@@ -348,7 +348,7 @@ export async function fetchInvoices(clientId?: number) {
     }
 
     // Fetch pets
-    const petIds = [...new Set(invoices.map(invoice => invoice.pet_id))]
+    const petIds = Array.from(new Set(invoices.map(invoice => invoice.pet_id)))
     const { data: pets, error: petsError } = await supabase
       .from('pets')
       .select('*')

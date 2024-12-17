@@ -217,9 +217,10 @@ export default function MedicalRecordsPage() {
 
       <MedicalRecordForm
         record={selectedRecord}
-        petId={selectedRecord?.pet_id}
+        petId={selectedRecord?.pet_id || 0}
         onClose={() => setSelectedRecord(null)}
-        onSuccess={async () => {
+        onSubmit={async (event) => {
+          event.preventDefault()
           setSelectedRecord(null)
           await loadAllMedicalRecords()
         }}

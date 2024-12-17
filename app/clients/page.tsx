@@ -204,13 +204,14 @@ function ClientsContent() {
   const handleMedicalRecordSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     const formData = new FormData(event.currentTarget)
+
     const recordData = {
       date: formData.get('date') as string,
       diagnosis: formData.get('diagnosis') as string,
       treatment: formData.get('treatment') as string,
       notes: formData.get('notes') as string,
-      next_appointment: formData.get('next_appointment') as string || null,
-      pet_id: selectedPetForRecords?.id as number,
+      next_appointment: formData.get('next_appointment') ? (formData.get('next_appointment') as string) : undefined,
+      pet_id: parseInt(formData.get('pet_id') as string),
     }
 
     try {
@@ -433,6 +434,7 @@ function ClientsContent() {
         record={selectedMedicalRecord}
         onClose={() => setSelectedMedicalRecord(null)}
         onSubmit={handleMedicalRecordSubmit}
+        petId={selectedPetForRecords?.id || 0}
       />
 
       {showInvoiceForm && (

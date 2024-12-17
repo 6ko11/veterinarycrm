@@ -110,17 +110,23 @@ export function InvoiceForm({ invoice, onClose, onSubmit }: InvoiceFormProps) {
   }
 
   const addItem = (item: InventoryItem) => {
+    const inventoryId = parseInt(item.id)
+    if (isNaN(inventoryId)) {
+      console.error('Invalid inventory ID:', item.id)
+      return
+    }
+
     setSelectedItems(prev => {
-      const existing = prev.find(i => i.inventory_id === item.id)
+      const existing = prev.find(i => i.inventory_id === inventoryId)
       if (existing) {
         return prev.map(i => 
-          i.inventory_id === item.id 
+          i.inventory_id === inventoryId 
             ? { ...i, quantity: i.quantity + 1 }
             : i
         )
       }
       return [...prev, {
-        inventory_id: item.id,
+        inventory_id: inventoryId,
         description: item.name,
         quantity: 1,
         unit_price: item.sale_price,

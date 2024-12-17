@@ -48,7 +48,7 @@ export default function PatientFlowPage() {
     date: new Date().toISOString().split('T')[0],
     total: 0,
     status: 'pending',
-    items: [],
+    items: [] as InvoiceItem[],
   })
   const [newItem, setNewItem] = useState<Omit<InvoiceItem, 'id' | 'invoice_id'>>({
     description: '',
@@ -231,7 +231,7 @@ export default function PatientFlowPage() {
     if (!newItem.description || !newItem.quantity || !newItem.unit_price) return
     setInvoice(prev => ({
       ...prev,
-      items: [...prev.items, newItem],
+      items: [...prev.items, { ...newItem, id: 0, invoice_id: 0 }],
       total: prev.total + (newItem.quantity * newItem.unit_price)
     }))
     setNewItem({
@@ -256,11 +256,11 @@ export default function PatientFlowPage() {
   const handleCreateInvoice = async () => {
     if (!selectedClient || !selectedPet || invoice.items.length === 0) return
     try {
-      const invoiceData = {
+      const invoiceData: Omit<Invoice, 'id' | 'created_at' | 'updated_at'> = {
         ...invoice,
         client_id: selectedClient.id,
         pet_id: selectedPet.id,
-        status: 'pending',
+        status: 'pending' as const,
       }
       await createInvoice(invoiceData)
       setInvoice({
@@ -268,7 +268,7 @@ export default function PatientFlowPage() {
         pet_id: selectedPet.id,
         date: new Date().toISOString().split('T')[0],
         total: 0,
-        status: 'pending',
+        status: 'pending' as const,
         items: [],
       })
       toast.success('Invoice created successfully')
@@ -278,13 +278,21 @@ export default function PatientFlowPage() {
     }
   }
 
+  const isValidInvoiceStatus = (status: string): status is 'pending' | 'paid' | 'cancelled' => {
+    return ['pending', 'paid', 'cancelled'].includes(status)
+  }
+
   const handleUpdateInvoice = async (invoiceId: number, status: string) => {
+    if (!isValidInvoiceStatus(status)) {
+      toast.error('Invalid invoice status')
+      return
+    }
     try {
-      await updateInvoice(invoiceId, { status: status as 'pending' | 'paid' | 'cancelled' })
+      await updateInvoice(invoiceId, { status })
       toast.success('Invoice status updated successfully')
     } catch (error) {
       console.error('Error updating invoice:', error)
-      toast.error('Failed to update invoice status')
+      toast.error('Failed to update invoice')
     }
   }
 
