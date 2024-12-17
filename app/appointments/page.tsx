@@ -23,6 +23,17 @@ import { format } from 'date-fns'
 
 type ViewType = 'month' | 'week' | 'day' | 'agenda'
 
+interface Appointment {
+  id: string
+  title: string
+  start: Date
+  end: Date
+  type: string
+  petId?: string
+  clientId?: string
+  notes?: string
+}
+
 const localizer = momentLocalizer(moment)
 
 // Set first day of week to Monday (1)
@@ -431,8 +442,8 @@ export default function AppointmentsPage() {
               <DnDCalendar
                 localizer={localizer}
                 events={events}
-                startAccessor="start"
-                endAccessor="end"
+                startAccessor={(event: Appointment) => event.start}
+                endAccessor={(event: Appointment) => event.end}
                 onSelectSlot={handleSelectSlot}
                 selectable
                 resizable
@@ -462,8 +473,8 @@ export default function AppointmentsPage() {
               <DnDCalendar
                 localizer={localizer}
                 events={events}
-                startAccessor="start"
-                endAccessor="end"
+                startAccessor={(event: Appointment) => event.start}
+                endAccessor={(event: Appointment) => event.end}
                 onSelectSlot={handleSelectSlot}
                 selectable
                 resizable
@@ -493,8 +504,8 @@ export default function AppointmentsPage() {
               <DnDCalendar
                 localizer={localizer}
                 events={events}
-                startAccessor="start"
-                endAccessor="end"
+                startAccessor={(event: Appointment) => event.start}
+                endAccessor={(event: Appointment) => event.end}
                 onSelectSlot={handleSelectSlot}
                 selectable
                 resizable
