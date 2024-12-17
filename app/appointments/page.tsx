@@ -448,7 +448,6 @@ export default function AppointmentsPage() {
                 onSelectEvent={handleEventClick}
                 selectable
                 resizable
-                draggable
                 onEventDrop={handleEventDrop}
                 onEventResize={moveEvent => {
                   const { event, start, end } = moveEvent;
@@ -479,7 +478,6 @@ export default function AppointmentsPage() {
                 onSelectEvent={handleEventClick}
                 selectable
                 resizable
-                draggable
                 onEventDrop={handleEventDrop}
                 onEventResize={moveEvent => {
                   const { event, start, end } = moveEvent;
@@ -510,7 +508,6 @@ export default function AppointmentsPage() {
                 onSelectEvent={handleEventClick}
                 selectable
                 resizable
-                draggable
                 onEventDrop={handleEventDrop}
                 onEventResize={moveEvent => {
                   const { event, start, end } = moveEvent;
