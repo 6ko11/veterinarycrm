@@ -15,7 +15,7 @@ import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { Appointment, addAppointment, fetchAppointments, subscribeToAppointments, updateAppointment, deleteAppointment } from '@/lib/appointments'
+import { Appointment as AppointmentType, addAppointment, fetchAppointments, subscribeToAppointments, updateAppointment, deleteAppointment } from '@/lib/appointments'
 import { toast } from 'sonner'
 import { DndProvider } from 'react-dnd'
 import { HTML5Backend } from 'react-dnd-html5-backend'
@@ -47,8 +47,8 @@ moment.updateLocale('en', {
 const DnDCalendar = withDragAndDrop(Calendar)
 
 export default function AppointmentsPage() {
-  const [events, setEvents] = useState<Appointment[]>([])
-  const [newEvent, setNewEvent] = useState<Omit<Appointment, 'id'>>({
+  const [events, setEvents] = useState<AppointmentType[]>([])
+  const [newEvent, setNewEvent] = useState<Omit<AppointmentType, 'id'>>({
     title: '',
     start: new Date(),
     end: new Date(),
@@ -63,7 +63,7 @@ export default function AppointmentsPage() {
   const [sendReminder, setSendReminder] = useState(true)
   const [view, setView] = useState<ViewType>('month')
   const [selectedDate, setSelectedDate] = useState(new Date())
-  const [selectedEvent, setSelectedEvent] = useState<Appointment | null>(null);
+  const [selectedEvent, setSelectedEvent] = useState<AppointmentType | null>(null);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
 
   const handleSelectSlot = (slotInfo: { start: Date; end: Date }) => {
@@ -110,16 +110,16 @@ export default function AppointmentsPage() {
     }
   }
 
-  const isAppointmentConflict = (appointment: Omit<Appointment, 'id'>) => {
+  const isAppointmentConflict = (appointment: Omit<AppointmentType, 'id'>) => {
     return events.some(event =>
       (appointment.start < event.end && appointment.end > event.start)
     );
   }
 
-  const generateRecurringAppointments = async (appointment: Appointment) => {
+  const generateRecurringAppointments = async (appointment: AppointmentType) => {
     if (!appointment.recurrence_pattern) return
 
-    const recurringEvents: Omit<Appointment, 'id'>[] = []
+    const recurringEvents: Omit<AppointmentType, 'id'>[] = []
     const endDate = new Date()
     endDate.setFullYear(endDate.getFullYear() + 1) // Generate appointments for one year
 
@@ -160,7 +160,7 @@ export default function AppointmentsPage() {
     }
   }
 
-  const getDailyAppointments = (date: Date): Appointment[] => {
+  const getDailyAppointments = (date: Date): AppointmentType[] => {
     return events.filter(event =>
       event.start.toDateString() === date.toDateString()
     )
@@ -238,12 +238,12 @@ export default function AppointmentsPage() {
     }
   };
 
-  const handleEventClick = (event: Appointment) => {
+  const handleEventClick = (event: AppointmentType) => {
     setSelectedEvent(event);
     setEditDialogOpen(true);
   };
 
-  const handleEditAppointment = async (updatedEvent: Appointment) => {
+  const handleEditAppointment = async (updatedEvent: AppointmentType) => {
     try {
       const result = await updateAppointment(updatedEvent);
       
@@ -296,7 +296,7 @@ export default function AppointmentsPage() {
 
     fetchAndSetAppointments();
 
-    const subscription = subscribeToAppointments((updatedAppointments: Appointment[]) => {
+    const subscription = subscribeToAppointments((updatedAppointments: AppointmentType[]) => {
       console.log('Received updated appointments:', updatedAppointments);
       setEvents(updatedAppointments);
     });
@@ -442,8 +442,8 @@ export default function AppointmentsPage() {
               <DnDCalendar
                 localizer={localizer}
                 events={events}
-                startAccessor={(event: Appointment) => event.start}
-                endAccessor={(event: Appointment) => event.end}
+                startAccessor={(event: AppointmentType) => event.start}
+                endAccessor={(event: AppointmentType) => event.end}
                 onSelectSlot={handleSelectSlot}
                 selectable
                 resizable
@@ -473,8 +473,8 @@ export default function AppointmentsPage() {
               <DnDCalendar
                 localizer={localizer}
                 events={events}
-                startAccessor={(event: Appointment) => event.start}
-                endAccessor={(event: Appointment) => event.end}
+                startAccessor={(event: AppointmentType) => event.start}
+                endAccessor={(event: AppointmentType) => event.end}
                 onSelectSlot={handleSelectSlot}
                 selectable
                 resizable
@@ -504,8 +504,8 @@ export default function AppointmentsPage() {
               <DnDCalendar
                 localizer={localizer}
                 events={events}
-                startAccessor={(event: Appointment) => event.start}
-                endAccessor={(event: Appointment) => event.end}
+                startAccessor={(event: AppointmentType) => event.start}
+                endAccessor={(event: AppointmentType) => event.end}
                 onSelectSlot={handleSelectSlot}
                 selectable
                 resizable
