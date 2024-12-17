@@ -54,7 +54,7 @@ function BillingContent() {
   const [searchTerm, setSearchTerm] = useState('')
   const [invoices, setInvoices] = useState<(Invoice & { pet: Pet & { client: Client } })[]>([])
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null)
-  const [viewingInvoice, setViewingInvoice] = useState<Invoice | null>(null)
+  const [viewingInvoice, setViewingInvoice] = useState<(Invoice & { pet: Pet & { client: Client } }) | null>(null)
   const [loading, setLoading] = useState(true)
   const [showInvoiceForm, setShowInvoiceForm] = useState(false)
 
