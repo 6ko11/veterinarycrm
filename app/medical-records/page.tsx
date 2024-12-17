@@ -1,250 +1,229 @@
 'use client'
 
-import { useState } from 'react'
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Button } from "@/components/ui/button"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
+import { Plus, Pencil, Trash2 } from 'lucide-react'
+import { toast } from 'sonner'
+import { MedicalRecord, fetchMedicalRecordsByPetId, deleteMedicalRecord } from '@/lib/medical-records'
+import { Pet, fetchPetsByClientId } from '@/lib/pets'
+import { Client, fetchClients } from '@/lib/clients'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { supabase } from '@/lib/supabase'
+import { MedicalRecordForm } from '@/components/records/medical-record-form'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
+import { format } from 'date-fns'
 
 export default function MedicalRecordsPage() {
-  const [records, setRecords] = useState([
-    { id: 1, petName: "Max", ownerName: "John Doe", date: "2023-06-15", diagnosis: "Annual checkup", treatment: "Vaccinations updated" },
-    { id: 2, petName: "Whiskers", ownerName: "Jane Smith", date: "2023-06-16", diagnosis: "Skin irritation", treatment: "Prescribed antihistamines" },
-  ])
+  const router = useRouter()
+  const [searchTerm, setSearchTerm] = useState('')
+  const [medicalRecords, setMedicalRecords] = useState<(MedicalRecord & { pet: Pet & { client: Client } })[]>([])
+  const [selectedRecord, setSelectedRecord] = useState<MedicalRecord | null>(null)
+  const [loading, setLoading] = useState(true)
 
-  const [labResults, setLabResults] = useState([
-    { id: 1, petName: "Max", ownerName: "John Doe", date: "2023-06-15", testType: "Blood work", result: "Normal" },
-    { id: 2, petName: "Whiskers", ownerName: "Jane Smith", date: "2023-06-16", testType: "Allergy test", result: "Positive for pollen" },
-  ])
+  useEffect(() => {
+    loadAllMedicalRecords()
 
-  const [newRecord, setNewRecord] = useState({
-    petName: '',
-    ownerName: '',
-    date: '',
-    diagnosis: '',
-    treatment: '',
-  })
+    const channel = supabase
+      .channel('medical-records-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'medical_records'
+        },
+        async (payload) => {
+          console.log('Change received!', payload)
+          const message = payload.eventType === 'INSERT' 
+            ? 'New medical record added' 
+            : payload.eventType === 'DELETE' 
+              ? 'Medical record removed' 
+              : 'Medical record updated'
+          
+          toast.info(message)
+          await loadAllMedicalRecords()
+        }
+      )
+      .subscribe()
 
-  const [newLabResult, setNewLabResult] = useState({
-    petName: '',
-    ownerName: '',
-    date: '',
-    testType: '',
-    result: '',
-  })
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [])
 
-  const handleAddRecord = () => {
-    setRecords([...records, { ...newRecord, id: records.length + 1 }])
-    setNewRecord({ petName: '', ownerName: '', date: '', diagnosis: '', treatment: '' })
+  const loadAllMedicalRecords = async () => {
+    try {
+      setLoading(true)
+      // First, get all clients
+      const clients = await fetchClients()
+      
+      // Then get all pets for each client
+      const allPets: (Pet & { client: Client })[] = []
+      await Promise.all(clients.map(async (client) => {
+        const pets = await fetchPetsByClientId(client.id)
+        allPets.push(...pets.map(pet => ({ ...pet, client })))
+      }))
+      
+      // Finally, get all medical records for each pet
+      const allRecords: (MedicalRecord & { pet: Pet & { client: Client } })[] = []
+      await Promise.all(allPets.map(async (pet) => {
+        const records = await fetchMedicalRecordsByPetId(pet.id)
+        allRecords.push(...records.map(record => ({ ...record, pet })))
+      }))
+      
+      // Sort records by date, newest first
+      const sortedRecords = allRecords.sort((a, b) => 
+        new Date(b.date).getTime() - new Date(a.date).getTime()
+      )
+      
+      setMedicalRecords(sortedRecords)
+    } catch (error) {
+      console.error('Error loading medical records:', error)
+      toast.error('Failed to load medical records')
+    } finally {
+      setLoading(false)
+    }
   }
 
-  const handleAddLabResult = () => {
-    setLabResults([...labResults, { ...newLabResult, id: labResults.length + 1 }])
-    setNewLabResult({ petName: '', ownerName: '', date: '', testType: '', result: '' })
-  }
+  const filteredRecords = medicalRecords.filter(record => {
+    const searchLower = searchTerm.toLowerCase()
+    return (
+      record.pet.name.toLowerCase().includes(searchLower) ||
+      record.pet.client.name.toLowerCase().includes(searchLower) ||
+      record.diagnosis.toLowerCase().includes(searchLower) ||
+      record.treatment.toLowerCase().includes(searchLower) ||
+      (record.notes?.toLowerCase() || '').includes(searchLower)
+    )
+  })
 
   return (
-    <div className="space-y-8">
-      <h1 className="text-3xl font-bold">Medical Records</h1>
-      <Tabs defaultValue="records">
-        <TabsList>
-          <TabsTrigger value="records">Patient Records</TabsTrigger>
-          <TabsTrigger value="lab-results">Lab Results</TabsTrigger>
-        </TabsList>
-        <TabsContent value="records">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle>Patient Records</CardTitle>
-              <Dialog>
-                <DialogTrigger asChild>
-                  <Button>Add Record</Button>
-                </DialogTrigger>
-                <DialogContent className="sm:max-w-[425px]">
-                  <DialogHeader>
-                    <DialogTitle>Add New Medical Record</DialogTitle>
-                  </DialogHeader>
-                  <div className="grid gap-4 py-4">
-                    <div className="grid grid-cols-4 items-center gap-4">
-                      <Label htmlFor="petName" className="text-right">Pet Name</Label>
-                      <Input
-                        id="petName"
-                        value={newRecord.petName}
-                        onChange={(e) => setNewRecord({ ...newRecord, petName: e.target.value })}
-                        className="col-span-3"
-                      />
+    <div className="container py-10">
+      <div className="flex justify-between items-center mb-8">
+        <h1 className="text-3xl font-bold">Medical Records</h1>
+        <div className="flex items-center gap-4">
+          <Input
+            placeholder="Search records..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-[300px]"
+          />
+          <Button onClick={() => setSelectedRecord({} as MedicalRecord)}>
+            <Plus className="mr-2 h-4 w-4" /> Add Record
+          </Button>
+        </div>
+      </div>
+
+      {loading ? (
+        <div className="text-center py-8">Loading medical records...</div>
+      ) : filteredRecords.length === 0 ? (
+        <div className="text-center py-8">No medical records found.</div>
+      ) : (
+        <div className="rounded-md border">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Date</TableHead>
+                <TableHead>Pet</TableHead>
+                <TableHead>Owner</TableHead>
+                <TableHead>Diagnosis</TableHead>
+                <TableHead>Treatment</TableHead>
+                <TableHead>Notes</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filteredRecords.map((record) => (
+                <TableRow key={record.id}>
+                  <TableCell>{format(new Date(record.date), 'PPP')}</TableCell>
+                  <TableCell>{record.pet.name}</TableCell>
+                  <TableCell>{record.pet.client.name}</TableCell>
+                  <TableCell>{record.diagnosis}</TableCell>
+                  <TableCell>{record.treatment}</TableCell>
+                  <TableCell>{record.notes || '-'}</TableCell>
+                  <TableCell>
+                    <div className="flex justify-end gap-2">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => setSelectedRecord(record)}
+                        title="Edit Record"
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            title="Delete Record"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Delete Medical Record</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              Are you sure you want to delete this medical record? This action cannot be undone.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+                            <AlertDialogAction 
+                              onClick={async () => {
+                                try {
+                                  await deleteMedicalRecord(record.id)
+                                  // Update local state immediately
+                                  setMedicalRecords(prev => prev.filter(r => r.id !== record.id))
+                                  toast.success('Medical record deleted successfully')
+                                } catch (error) {
+                                  console.error('Error deleting medical record:', error)
+                                  toast.error('Failed to delete medical record')
+                                }
+                              }}
+                            >
+                              Delete
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
                     </div>
-                    <div className="grid grid-cols-4 items-center gap-4">
-                      <Label htmlFor="ownerName" className="text-right">Owner Name</Label>
-                      <Input
-                        id="ownerName"
-                        value={newRecord.ownerName}
-                        onChange={(e) => setNewRecord({ ...newRecord, ownerName: e.target.value })}
-                        className="col-span-3"
-                      />
-                    </div>
-                    <div className="grid grid-cols-4 items-center gap-4">
-                      <Label htmlFor="date" className="text-right">Date</Label>
-                      <Input
-                        id="date"
-                        type="date"
-                        value={newRecord.date}
-                        onChange={(e) => setNewRecord({ ...newRecord, date: e.target.value })}
-                        className="col-span-3"
-                      />
-                    </div>
-                    <div className="grid grid-cols-4 items-center gap-4">
-                      <Label htmlFor="diagnosis" className="text-right">Diagnosis</Label>
-                      <Input
-                        id="diagnosis"
-                        value={newRecord.diagnosis}
-                        onChange={(e) => setNewRecord({ ...newRecord, diagnosis: e.target.value })}
-                        className="col-span-3"
-                      />
-                    </div>
-                    <div className="grid grid-cols-4 items-center gap-4">
-                      <Label htmlFor="treatment" className="text-right">Treatment</Label>
-                      <Textarea
-                        id="treatment"
-                        value={newRecord.treatment}
-                        onChange={(e) => setNewRecord({ ...newRecord, treatment: e.target.value })}
-                        className="col-span-3"
-                      />
-                    </div>
-                  </div>
-                  <Button onClick={handleAddRecord}>Add Record</Button>
-                </DialogContent>
-              </Dialog>
-            </CardHeader>
-            <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Pet Name</TableHead>
-                    <TableHead>Owner Name</TableHead>
-                    <TableHead>Date</TableHead>
-                    <TableHead>Diagnosis</TableHead>
-                    <TableHead>Treatment</TableHead>
-                    <TableHead>Action</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {records.map((record) => (
-                    <TableRow key={record.id}>
-                      <TableCell>{record.petName}</TableCell>
-                      <TableCell>{record.ownerName}</TableCell>
-                      <TableCell>{record.date}</TableCell>
-                      <TableCell>{record.diagnosis}</TableCell>
-                      <TableCell>{record.treatment}</TableCell>
-                      <TableCell>
-                        <Button variant="outline" size="sm">View</Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-        </TabsContent>
-        <TabsContent value="lab-results">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle>Lab Results</CardTitle>
-              <Dialog>
-                <DialogTrigger asChild>
-                  <Button>Add Lab Result</Button>
-                </DialogTrigger>
-                <DialogContent className="sm:max-w-[425px]">
-                  <DialogHeader>
-                    <DialogTitle>Add New Lab Result</DialogTitle>
-                  </DialogHeader>
-                  <div className="grid gap-4 py-4">
-                    <div className="grid grid-cols-4 items-center gap-4">
-                      <Label htmlFor="labPetName" className="text-right">Pet Name</Label>
-                      <Input
-                        id="labPetName"
-                        value={newLabResult.petName}
-                        onChange={(e) => setNewLabResult({ ...newLabResult, petName: e.target.value })}
-                        className="col-span-3"
-                      />
-                    </div>
-                    <div className="grid grid-cols-4 items-center gap-4">
-                      <Label htmlFor="labOwnerName" className="text-right">Owner Name</Label>
-                      <Input
-                        id="labOwnerName"
-                        value={newLabResult.ownerName}
-                        onChange={(e) => setNewLabResult({ ...newLabResult, ownerName: e.target.value })}
-                        className="col-span-3"
-                      />
-                    </div>
-                    <div className="grid grid-cols-4 items-center gap-4">
-                      <Label htmlFor="labDate" className="text-right">Date</Label>
-                      <Input
-                        id="labDate"
-                        type="date"
-                        value={newLabResult.date}
-                        onChange={(e) => setNewLabResult({ ...newLabResult, date: e.target.value })}
-                        className="col-span-3"
-                      />
-                    </div>
-                    <div className="grid grid-cols-4 items-center gap-4">
-                      <Label htmlFor="testType" className="text-right">Test Type</Label>
-                      <Input
-                        id="testType"
-                        value={newLabResult.testType}
-                        onChange={(e) => setNewLabResult({ ...newLabResult, testType: e.target.value })}
-                        className="col-span-3"
-                      />
-                    </div>
-                    <div className="grid grid-cols-4 items-center gap-4">
-                      <Label htmlFor="result" className="text-right">Result</Label>
-                      <Textarea
-                        id="result"
-                        value={newLabResult.result}
-                        onChange={(e) => setNewLabResult({ ...newLabResult, result: e.target.value })}
-                        className="col-span-3"
-                      />
-                    </div>
-                  </div>
-                  <Button onClick={handleAddLabResult}>Add Lab Result</Button>
-                </DialogContent>
-              </Dialog>
-            </CardHeader>
-            <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Pet Name</TableHead>
-                    <TableHead>Owner Name</TableHead>
-                    <TableHead>Date</TableHead>
-                    <TableHead>Test Type</TableHead>
-                    <TableHead>Result</TableHead>
-                    <TableHead>Action</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {labResults.map((result) => (
-                    <TableRow key={result.id}>
-                      <TableCell>{result.petName}</TableCell>
-                      <TableCell>{result.ownerName}</TableCell>
-                      <TableCell>{result.date}</TableCell>
-                      <TableCell>{result.testType}</TableCell>
-                      <TableCell>{result.result}</TableCell>
-                      <TableCell>
-                        <Button variant="outline" size="sm">View</Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      )}
+
+      <MedicalRecordForm
+        record={selectedRecord}
+        petId={selectedRecord?.pet_id}
+        onClose={() => setSelectedRecord(null)}
+        onSuccess={async () => {
+          setSelectedRecord(null)
+          await loadAllMedicalRecords()
+        }}
+      />
     </div>
   )
 }
-

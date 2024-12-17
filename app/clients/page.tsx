@@ -1,293 +1,450 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Button } from "@/components/ui/button"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
+import { useEffect, useState } from "react"
 import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { supabase } from '@/lib/supabase'
-import { ChangeEvent } from 'react'
+import { Button } from "@/components/ui/button"
+import { Plus } from "lucide-react"
+import { toast } from "sonner"
+import { useRouter } from "next/navigation"
+import { Client, addClient, deleteClient, fetchClients, updateClient } from "@/lib/clients"
+import { Pet, addPet, deletePet, fetchPetsByClientId, updatePet } from "@/lib/pets"
+import { MedicalRecord, addMedicalRecord, deleteMedicalRecord, fetchMedicalRecordsByPetId, updateMedicalRecord } from "@/lib/medical-records"
+import { Invoice, createInvoice, deleteInvoice, fetchInvoicesByPetId, updateInvoice } from "@/lib/invoices"
+import { supabase } from "@/lib/supabase"
+import { AuthCheck } from '@/components/auth/auth-check'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 
-type Client = {
-  id: number;
-  name: string;
-  email: string;
-  phone: string;
-}
-
-type Pet = {
-  id: number;
-  name: string;
-  species: string;
-  breed: string;
-  age: number;
-  clientId: number | null;
-}
+// Import components
+import { ClientList } from "@/components/clients/client-list"
+import { ClientForm } from "@/components/clients/client-form"
+import { PetList } from "@/components/pets/pet-list"
+import { PetForm } from "@/components/pets/pet-form"
+import { MedicalRecordsDialog } from "@/components/records/medical-records-dialog"
+import { MedicalRecordForm } from "@/components/records/medical-record-form"
+import { InvoiceForm } from "@/components/records/invoice-form"
+import { InvoiceList } from "@/components/records/invoice-list"
 
 export default function ClientsPage() {
+  return (
+    <AuthCheck>
+      <ClientsContent />
+    </AuthCheck>
+  )
+}
+
+function ClientsContent() {
+  const router = useRouter()
+  const [activeTab, setActiveTab] = useState('clients')
+  const [searchTerm, setSearchTerm] = useState("")
   const [clients, setClients] = useState<Client[]>([])
   const [pets, setPets] = useState<Pet[]>([])
-  const [newClient, setNewClient] = useState<Client>({ id: 0, name: '', email: '', phone: '' })
-  const [newPet, setNewPet] = useState<Pet>({ id: 0, name: '', species: '', breed: '', age: 0, clientId: null })
-  const [searchTerm, setSearchTerm] = useState('')
+  const [selectedClient, setSelectedClient] = useState<Client | null>(null)
+  const [selectedPet, setSelectedPet] = useState<Pet | null>(null)
+  const [selectedClientForPet, setSelectedClientForPet] = useState<number>(0)
+  const [selectedPetForRecords, setSelectedPetForRecords] = useState<Pet | null>(null)
+  const [medicalRecords, setMedicalRecords] = useState<MedicalRecord[]>([])
+  const [selectedMedicalRecord, setSelectedMedicalRecord] = useState<MedicalRecord | null>(null)
+  const [invoices, setInvoices] = useState<Invoice[]>([])
+  const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null)
+  const [showInvoiceForm, setShowInvoiceForm] = useState(false)
 
-  useEffect(() => {
-    const fetchClients = async () => {
-      const { data, error } = await supabase
-        .from('clients')
-        .select('*')
-      if (error) {
-        console.error('Error fetching clients:', error)
-      } else {
-        setClients(data || [])
-      }
-    }
-
-    const fetchPets = async () => {
-      const { data, error } = await supabase
-        .from('pets')
-        .select('*')
-      if (error) {
-        console.error('Error fetching pets:', error)
-      } else {
-        setPets(data || [])
-      }
-    }
-
-    fetchClients()
-    fetchPets()
-    
-    // Refetch pets after a short delay to refresh schema cache
-    setTimeout(() => {
-      fetchPets();
-    }, 1000);
-  }, [])
-
-
-  const handleAddClient = async () => {
-    if (newClient.name && newClient.email && newClient.phone) {
-      const { error } = await supabase
-        .from('clients')
-        .insert([newClient])
-      if (error) {
-        console.error('Error adding client:', error)
-      } else {
-        setClients(prevClients => [...prevClients, newClient])
-        setNewClient({ id: 0, name: '', email: '', phone: '' })
-      }
-    } else {
-      alert('Please fill in all client fields')
+  const loadClients = async () => {
+    try {
+      const clients = await fetchClients()
+      setClients(clients)
+    } catch (error) {
+      console.error('Error loading clients:', error)
+      toast.error('Failed to load clients')
     }
   }
 
-  const handleAddPet = async () => {
-    if (newPet.name && newPet.species && newPet.breed && newPet.age && newPet.clientId != null) {
-      const { error } = await supabase
-        .from('pets')
-        .insert([newPet])
-      if (error) {
-        console.error('Error adding pet:', error)
+  const loadPets = async () => {
+    try {
+      const allPets: Pet[] = []
+      await Promise.all(clients.map(async (client) => {
+        const clientPets = await fetchPetsByClientId(client.id)
+        allPets.push(...clientPets)
+      }))
+      setPets(allPets)
+    } catch (error) {
+      console.error('Error loading pets:', error)
+      toast.error('Failed to load pets')
+    }
+  }
+
+  useEffect(() => {
+    loadClients()
+
+    const channel = supabase
+      .channel('db-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'clients'
+        },
+        async (payload) => {
+          console.log('Change received!', payload)
+          const message = payload.eventType === 'INSERT' 
+            ? 'New client added' 
+            : payload.eventType === 'DELETE' 
+              ? 'Client removed' 
+              : 'Client updated'
+          
+          toast.info(message)
+          await loadClients()
+        }
+      )
+      .subscribe()
+
+    const clientsSubscription = supabase
+      .channel('clients')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'clients' }, async () => {
+        await loadClients()
+      })
+      .subscribe()
+
+    const petsSubscription = supabase
+      .channel('pets')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'pets' }, async () => {
+        await loadPets()
+      })
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+      clientsSubscription.unsubscribe()
+      petsSubscription.unsubscribe()
+    }
+  }, [])
+
+  useEffect(() => {
+    if (clients.length > 0) {
+      loadPets()
+    }
+  }, [clients])
+
+  const loadMedicalRecords = async (petId: number) => {
+    try {
+      const records = await fetchMedicalRecordsByPetId(petId)
+      setMedicalRecords(records)
+    } catch (error) {
+      console.error('Error loading medical records:', error)
+      toast.error('Failed to load medical records')
+    }
+  }
+
+  const loadInvoices = async (petId: number) => {
+    try {
+      const fetchedInvoices = await fetchInvoicesByPetId(petId)
+      setInvoices(fetchedInvoices.map(invoice => ({
+        ...invoice,
+        items: invoice.invoice_items // Map invoice_items to items
+      })))
+    } catch (error) {
+      console.error('Error loading invoices:', error)
+      toast.error('Failed to load invoices')
+    }
+  }
+
+  const handleClientSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    const formData = new FormData(event.currentTarget)
+    const clientData = {
+      name: formData.get('name') as string,
+      email: formData.get('email') as string,
+      phone: formData.get('phone') as string,
+    }
+
+    try {
+      if (selectedClient?.id) {
+        await updateClient({ ...clientData, id: selectedClient.id })
+        toast.success('Client updated successfully')
       } else {
-        setPets(prevPets => [...prevPets, newPet])
-        setNewPet({ id: 0, name: '', species: '', breed: '', age: 0, clientId: null })
+        await addClient(clientData)
+        toast.success('Client added successfully')
       }
-    } else {
-      alert('Please fill in all pet fields')
+      setSelectedClient(null)
+      await loadClients()
+    } catch (error) {
+      console.error('Error saving client:', error)
+      toast.error('Failed to save client')
+    }
+  }
+
+  const handlePetSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    const formData = new FormData(event.currentTarget)
+    const petData = {
+      name: formData.get('name') as string,
+      species: formData.get('species') as string,
+      breed: formData.get('breed') as string,
+      age: parseInt(formData.get('age') as string),
+      client_id: selectedClientForPet,
+    }
+
+    try {
+      if (selectedPet?.id) {
+        await updatePet(selectedPet.id, petData)
+        toast.success('Pet updated successfully')
+      } else {
+        await addPet(petData)
+        toast.success('Pet added successfully')
+      }
+      setSelectedPet(null)
+      setSelectedClientForPet(0)
+      await loadPets()
+    } catch (error) {
+      console.error('Error saving pet:', error)
+      toast.error('Failed to save pet')
+    }
+  }
+
+  const handleMedicalRecordSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    const formData = new FormData(event.currentTarget)
+    const recordData = {
+      date: formData.get('date') as string,
+      diagnosis: formData.get('diagnosis') as string,
+      treatment: formData.get('treatment') as string,
+      notes: formData.get('notes') as string,
+      next_appointment: formData.get('next_appointment') as string || null,
+      pet_id: selectedPetForRecords?.id as number,
+    }
+
+    try {
+      if (selectedMedicalRecord?.id) {
+        await updateMedicalRecord(selectedMedicalRecord.id, recordData)
+        toast.success('Medical record updated successfully')
+      } else {
+        await addMedicalRecord(recordData)
+        toast.success('Medical record added successfully')
+      }
+      setSelectedMedicalRecord(null)
+      await loadMedicalRecords(selectedPetForRecords?.id as number)
+    } catch (error) {
+      console.error('Error saving medical record:', error)
+      toast.error('Failed to save medical record')
+    }
+  }
+
+  const handleInvoiceSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    const formData = new FormData(event.currentTarget)
+    
+    const items = Array.from(formData.getAll('items')).map(item => {
+      const parsedItem = JSON.parse(item as string)
+      // Only include fields that exist in the database table
+      return {
+        description: parsedItem.description,
+        quantity: parsedItem.quantity,
+        unit_price: parsedItem.unit_price
+      }
+    })
+    
+    const invoiceData = {
+      date: formData.get('date') as string,
+      total: parseFloat(formData.get('total') as string),
+      status: formData.get('status') as 'pending' | 'paid' | 'cancelled',
+      pet_id: selectedPetForRecords?.id as number,
+      client_id: selectedPetForRecords?.client_id as number,
+    }
+
+    try {
+      if (selectedInvoice?.id) {
+        await updateInvoice(selectedInvoice.id, invoiceData, items)
+        toast.success('Invoice updated successfully')
+      } else {
+        await createInvoice(invoiceData, items)
+        toast.success('Invoice added successfully')
+      }
+      setSelectedInvoice(null)
+      setShowInvoiceForm(false)
+      await loadInvoices(selectedPetForRecords?.id as number)
+    } catch (error) {
+      console.error('Error saving invoice:', error)
+      toast.error('Failed to save invoice')
+    }
+  }
+
+  const handleViewRecords = async (pet: Pet) => {
+    setSelectedPetForRecords(pet)
+    await loadMedicalRecords(pet.id)
+    await loadInvoices(pet.id)
+  }
+
+  const handleEditInvoice = async (invoice: Invoice) => {
+    // Fetch the complete invoice with items before editing
+    try {
+      const fetchedInvoices = await fetchInvoicesByPetId(invoice.pet_id)
+      const completeInvoice = fetchedInvoices.find(i => i.id === invoice.id)
+      if (completeInvoice) {
+        setSelectedInvoice({
+          ...completeInvoice,
+          items: completeInvoice.invoice_items
+        })
+        setShowInvoiceForm(true)
+      }
+    } catch (error) {
+      console.error('Error loading invoice for edit:', error)
+      toast.error('Failed to load invoice details')
     }
   }
 
   return (
-    <div className="space-y-8">
-      <h1 className="text-3xl font-bold">Clients & Pets</h1>
+    <div className="container mx-auto py-10 space-y-8">
       <div className="flex justify-between items-center">
         <Input
-          placeholder="Search clients or pets..."
+          placeholder="Search clients and pets..."
           value={searchTerm}
-          onChange={(e: ChangeEvent<HTMLInputElement>) => setSearchTerm(e.target.value)}
+          onChange={(e) => setSearchTerm(e.target.value)}
           className="max-w-sm"
         />
+        <Button onClick={() => setSelectedClient({} as Client)}>
+          <Plus className="mr-2 h-4 w-4" /> Add Client
+        </Button>
       </div>
-      <Tabs defaultValue="clients">
+
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
         <TabsList>
           <TabsTrigger value="clients">Clients</TabsTrigger>
           <TabsTrigger value="pets">Pets</TabsTrigger>
         </TabsList>
-        <TabsContent value="clients">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle>Clients</CardTitle>
-              <Dialog>
-                <DialogTrigger asChild>
-                  <Button>Add Client</Button>
-                </DialogTrigger>
-                <DialogContent>
-                  <DialogHeader>
-                    <DialogTitle>Add New Client</DialogTitle>
-                  </DialogHeader>
-                  <div className="grid gap-4 py-4">
-                    <div className="grid grid-cols-4 items-center gap-4">
-                      <Label htmlFor="name" className="text-right">Name</Label>
-                      <Input
-                        id="name"
-                        value={newClient.name}
-                        onChange={(e: ChangeEvent<HTMLInputElement>) => setNewClient({ ...newClient, name: e.target.value })}
-                        className="col-span-3"
-                      />
-                    </div>
-                    <div className="grid grid-cols-4 items-center gap-4">
-                      <Label htmlFor="email" className="text-right">Email</Label>
-                      <Input
-                        id="email"
-                        type="email"
-                        value={newClient.email}
-                        onChange={(e: ChangeEvent<HTMLInputElement>) => setNewClient({ ...newClient, email: e.target.value })}
-                        className="col-span-3"
-                      />
-                    </div>
-                    <div className="grid grid-cols-4 items-center gap-4">
-                      <Label htmlFor="phone" className="text-right">Phone</Label>
-                      <Input
-                        id="phone"
-                        type="tel"
-                        value={newClient.phone}
-                        onChange={(e: ChangeEvent<HTMLInputElement>) => setNewClient({ ...newClient, phone: e.target.value })}
-                        className="col-span-3"
-                      />
-                    </div>
-                  </div>
-                  <Button onClick={handleAddClient}>Add Client</Button>
-                </DialogContent>
-              </Dialog>
-            </CardHeader>
-            <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Name</TableHead>
-                    <TableHead>Email</TableHead>
-                    <TableHead>Phone</TableHead>
-                    <TableHead>Action</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {clients.map((client) => (
-                    <TableRow key={client.id}>
-                      <TableCell>{client.name}</TableCell>
-                      <TableCell>{client.email}</TableCell>
-                      <TableCell>{client.phone}</TableCell>
-                      <TableCell>
-                        <Button variant="outline" size="sm">View</Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
+
+        <TabsContent value="clients" className="space-y-4">
+          <div>
+            <h2 className="text-2xl font-bold mb-4">Clients</h2>
+            <ClientList
+              clients={clients}
+              onEdit={setSelectedClient}
+              onDelete={async (client) => {
+                try {
+                  await deleteClient(client.id)
+                  toast.success('Client deleted successfully')
+                  await loadClients()
+                } catch (error) {
+                  console.error('Error deleting client:', error)
+                  toast.error('Failed to delete client')
+                }
+              }}
+              onAddPet={(clientId) => {
+                setSelectedClientForPet(clientId)
+                setSelectedPet({} as Pet)
+              }}
+              onViewPets={(clientId) => {
+                setActiveTab('pets')
+                setSearchTerm(clients.find(c => c.id === clientId)?.name || '')
+              }}
+              searchTerm={searchTerm}
+            />
+          </div>
         </TabsContent>
-        <TabsContent value="pets">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle>Pets</CardTitle>
-              <Dialog>
-                <DialogTrigger asChild>
-                  <Button>Add Pet</Button>
-                </DialogTrigger>
-                <DialogContent>
-                  <DialogHeader>
-                    <DialogTitle>Add New Pet</DialogTitle>
-                  </DialogHeader>
-                  <div className="grid gap-4 py-4">
-                    <div className="grid grid-cols-4 items-center gap-4">
-                      <Label htmlFor="petName" className="text-right">Name</Label>
-                      <Input
-                        id="petName"
-                        value={newPet.name}
-                        onChange={(e: ChangeEvent<HTMLInputElement>) => setNewPet({ ...newPet, name: e.target.value })}
-                        className="col-span-3"
-                      />
-                    </div>
-                    <div className="grid grid-cols-4 items-center gap-4">
-                      <Label htmlFor="species" className="text-right">Species</Label>
-                      <Input
-                        id="species"
-                        value={newPet.species}
-                        onChange={(e: ChangeEvent<HTMLInputElement>) => setNewPet({ ...newPet, species: e.target.value })}
-                        className="col-span-3"
-                      />
-                    </div>
-                    <div className="grid grid-cols-4 items-center gap-4">
-                      <Label htmlFor="breed" className="text-right">Breed</Label>
-                      <Input
-                        id="breed"
-                        value={newPet.breed}
-                        onChange={(e: ChangeEvent<HTMLInputElement>) => setNewPet({ ...newPet, breed: e.target.value })}
-                        className="col-span-3"
-                      />
-                    </div>
-                    <div className="grid grid-cols-4 items-center gap-4">
-                      <Label htmlFor="age" className="text-right">Age</Label>
-                      <Input
-                        id="age"
-                        type="number"
-                        value={newPet.age}
-                        onChange={(e: ChangeEvent<HTMLInputElement>) => setNewPet({ ...newPet, age: parseInt(e.target.value) })}
-                        className="col-span-3"
-                      />
-                    </div>
-                    <div className="grid grid-cols-4 items-center gap-4">
-                      <Label htmlFor="clientId" className="text-right">Client</Label>
-                      <select
-                        id="clientId"
-                        value={newPet.clientId == null ? "" : newPet.clientId}
-                        onChange={(e: ChangeEvent<HTMLSelectElement>) => setNewPet({ ...newPet, clientId: e.target.value === "" ? null : parseInt(e.target.value) })}
-                        className="col-span-3"
-                      >
-                        <option value="">Select a client</option>
-                        {clients.map((client) => (
-                          <option key={client.id} value={client.id}>{client.name}</option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-                  <Button onClick={handleAddPet}>Add Pet</Button>
-                </DialogContent>
-              </Dialog>
-            </CardHeader>
-            <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Name</TableHead>
-                    <TableHead>Species</TableHead>
-                    <TableHead>Breed</TableHead>
-                    <TableHead>Age</TableHead>
-                    <TableHead>Owner</TableHead>
-                    <TableHead>Action</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {pets.map((pet) => (
-                    <TableRow key={pet.id}>
-                      <TableCell>{pet.name}</TableCell>
-                      <TableCell>{pet.species}</TableCell>
-                      <TableCell>{pet.breed}</TableCell>
-                      <TableCell>{pet.age}</TableCell>
-                      <TableCell>{clients.find(c => c.id === pet.clientId)?.name}</TableCell>
-                      <TableCell>
-                        <Button variant="outline" size="sm">View</Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
+
+        <TabsContent value="pets" className="space-y-4">
+          <div>
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-2xl font-bold">Pets</h2>
+            </div>
+            <PetList
+              pets={pets}
+              clients={clients}
+              onEdit={(clientId, pet) => {
+                setSelectedClientForPet(clientId)
+                setSelectedPet(pet)
+              }}
+              onDelete={async (pet) => {
+                try {
+                  await deletePet(pet.id)
+                  toast.success('Pet deleted successfully')
+                  await loadPets()
+                } catch (error) {
+                  console.error('Error deleting pet:', error)
+                  toast.error('Failed to delete pet')
+                }
+              }}
+              onViewRecords={handleViewRecords}
+              searchTerm={searchTerm}
+            />
+          </div>
         </TabsContent>
       </Tabs>
+
+      <ClientForm
+        client={selectedClient}
+        onClose={() => setSelectedClient(null)}
+        onSubmit={handleClientSubmit}
+      />
+
+      <PetForm
+        pet={selectedPet}
+        clientId={selectedClientForPet}
+        onClose={() => {
+          setSelectedPet(null)
+          setSelectedClientForPet(0)
+        }}
+        onSubmit={handlePetSubmit}
+      />
+
+      <MedicalRecordsDialog
+        pet={selectedPetForRecords}
+        medicalRecords={medicalRecords}
+        invoices={invoices}
+        onClose={() => {
+          setSelectedPetForRecords(null)
+          setMedicalRecords([])
+          setInvoices([])
+        }}
+        onAddRecord={() => setSelectedMedicalRecord({} as MedicalRecord)}
+        onEditRecord={setSelectedMedicalRecord}
+        onDeleteRecord={async (record) => {
+          try {
+            await deleteMedicalRecord(record.id)
+            toast.success('Medical record deleted successfully')
+            await loadMedicalRecords(selectedPetForRecords?.id as number)
+          } catch (error) {
+            console.error('Error deleting medical record:', error)
+            toast.error('Failed to delete medical record')
+          }
+        }}
+        onAddInvoice={() => {
+          setSelectedInvoice({
+            client_id: selectedPetForRecords?.client_id,
+            pet_id: selectedPetForRecords?.id,
+            date: new Date().toISOString().split('T')[0],
+            status: 'pending'
+          } as Invoice)
+          setShowInvoiceForm(true)
+        }}
+        onEditInvoice={handleEditInvoice}
+        onDeleteInvoice={async (invoice) => {
+          try {
+            await deleteInvoice(invoice.id)
+            toast.success('Invoice deleted successfully')
+            await loadInvoices(selectedPetForRecords?.id as number)
+          } catch (error) {
+            console.error('Error deleting invoice:', error)
+            toast.error('Failed to delete invoice')
+          }
+        }}
+      />
+
+      <MedicalRecordForm
+        record={selectedMedicalRecord}
+        onClose={() => setSelectedMedicalRecord(null)}
+        onSubmit={handleMedicalRecordSubmit}
+      />
+
+      {showInvoiceForm && (
+        <InvoiceForm
+          invoice={selectedInvoice}
+          onClose={() => {
+            setShowInvoiceForm(false)
+            setSelectedInvoice(null)
+          }}
+          onSubmit={handleInvoiceSubmit}
+        />
+      )}
     </div>
   )
 }

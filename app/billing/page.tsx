@@ -1,356 +1,323 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Button } from "@/components/ui/button"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-
-type InvoiceItem = {
-  id: number;
-  description: string;
-  quantity: number;
-  unitPrice: number;
-}
-
-type Invoice = {
-  id: number;
-  invoiceNumber: string;
-  client: string;
-  pet: string;
-  items: InvoiceItem[];
-  discount: number;
-  total: number;
-  date: string;
-  status: string;
-}
+import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
+import { Plus, Pencil, Trash2, Eye } from 'lucide-react'
+import { toast } from 'sonner'
+import { Invoice, fetchInvoicesByPetId, deleteInvoice, updateInvoice, createInvoice } from '@/lib/invoices'
+import { Pet, fetchPetsByClientId } from '@/lib/pets'
+import { Client, fetchClients } from '@/lib/clients'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { supabase } from '@/lib/supabase'
+import { InvoiceForm } from '@/components/records/invoice-form'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { Badge } from "@/components/ui/badge"
+import { formatCurrency, formatDate } from '@/lib/utils'
+import { AuthCheck } from '@/components/auth/auth-check'
 
 export default function BillingPage() {
-  const [invoices, setInvoices] = useState<Invoice[]>([
-    {
-      id: 1,
-      invoiceNumber: "INV-001",
-      client: "John Doe",
-      pet: "Max",
-      items: [
-        { id: 1, description: "Annual check-up", quantity: 1, unitPrice: 100 },
-        { id: 2, description: "Vaccinations", quantity: 2, unitPrice: 25 },
-      ],
-      discount: 0,
-      total: 150,
-      date: "2023-06-10",
-      status: "Paid"
-    },
-    {
-      id: 2,
-      invoiceNumber: "INV-002",
-      client: "Jane Smith",
-      pet: "Whiskers",
-      items: [
-        { id: 1, description: "Dental cleaning", quantity: 1, unitPrice: 200 },
-      ],
-      discount: 10,
-      total: 180,
-      date: "2023-06-12",
-      status: "Pending"
-    },
-  ])
+  return (
+    <AuthCheck>
+      <BillingContent />
+    </AuthCheck>
+  )
+}
 
-  const [newInvoice, setNewInvoice] = useState<Invoice>({
-    id: 0,
-    invoiceNumber: "",
-    client: "",
-    pet: "",
-    items: [],
-    discount: 0,
-    total: 0,
-    date: "",
-    status: "Pending",
-  })
-
-  const [newItem, setNewItem] = useState<InvoiceItem>({
-    id: 0,
-    description: "",
-    quantity: 1,
-    unitPrice: 0,
-  })
-
-  const [previewMode, setPreviewMode] = useState(false)
+function BillingContent() {
+  const router = useRouter()
+  const [searchTerm, setSearchTerm] = useState('')
+  const [invoices, setInvoices] = useState<(Invoice & { pet: Pet & { client: Client } })[]>([])
+  const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null)
+  const [viewingInvoice, setViewingInvoice] = useState<Invoice | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [showInvoiceForm, setShowInvoiceForm] = useState(false)
 
   useEffect(() => {
-    setNewInvoice(prev => ({
-      ...prev,
-      invoiceNumber: generateInvoiceNumber(),
-      date: new Date().toISOString().split('T')[0],
-    }))
+    loadAllInvoices()
+
+    const channel = supabase
+      .channel('invoice-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'invoices'
+        },
+        async (payload) => {
+          console.log('Change received!', payload)
+          const message = payload.eventType === 'INSERT' 
+            ? 'New invoice added' 
+            : payload.eventType === 'DELETE' 
+              ? 'Invoice removed' 
+              : 'Invoice updated'
+          
+          toast.info(message)
+          await loadAllInvoices()
+        }
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
   }, [])
 
-  const generateInvoiceNumber = () => {
-    const prefix = "INV-"
-    const number = Math.floor(Math.random() * 10000).toString().padStart(4, '0')
-    return `${prefix}${number}`
-  }
-
-  const calculateTotal = (items: InvoiceItem[], discount: number) => {
-    const subtotal = items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0)
-    const discountAmount = subtotal * (discount / 100)
-    return subtotal - discountAmount
-  }
-
-  const handleAddItem = () => {
-    if (newItem.description && newItem.quantity > 0 && newItem.unitPrice > 0) {
-      setNewInvoice(prev => ({
-        ...prev,
-        items: [...prev.items, { ...newItem, id: prev.items.length + 1 }],
+  const loadAllInvoices = async () => {
+    try {
+      setLoading(true)
+      // First, get all clients
+      const clients = await fetchClients()
+      
+      // Then get all pets for each client
+      const allPets: (Pet & { client: Client })[] = []
+      await Promise.all(clients.map(async (client) => {
+        const pets = await fetchPetsByClientId(client.id)
+        allPets.push(...pets.map(pet => ({ ...pet, client })))
       }))
-      setNewItem({ id: 0, description: "", quantity: 1, unitPrice: 0 })
+      
+      // Finally, get all invoices for each pet
+      const allInvoices: (Invoice & { pet: Pet & { client: Client } })[] = []
+      await Promise.all(allPets.map(async (pet) => {
+        const invoices = await fetchInvoicesByPetId(pet.id)
+        allInvoices.push(...invoices.map(invoice => ({ ...invoice, pet })))
+      }))
+      
+      // Sort invoices by ID in descending order (newest first)
+      allInvoices.sort((a, b) => b.id - a.id)
+      
+      setInvoices(allInvoices)
+    } catch (error) {
+      console.error('Error loading invoices:', error)
+      toast.error('Failed to load invoices')
+    } finally {
+      setLoading(false)
     }
   }
 
-  const handleRemoveItem = (id: number) => {
-    setNewInvoice(prev => ({
-      ...prev,
-      items: prev.items.filter(item => item.id !== id),
-    }))
+  const getStatusColor = (status: string) => {
+    switch (status.toLowerCase()) {
+      case 'paid':
+        return 'bg-green-500'
+      case 'pending':
+        return 'bg-yellow-500'
+      case 'overdue':
+        return 'bg-red-500'
+      default:
+        return 'bg-gray-500'
+    }
   }
 
-  const handleAddInvoice = () => {
-    if (newInvoice.client && newInvoice.pet && newInvoice.items.length > 0) {
-      const total = calculateTotal(newInvoice.items, newInvoice.discount)
-      const finalInvoice = { ...newInvoice, id: invoices.length + 1, total }
-      setInvoices([...invoices, finalInvoice])
-      setNewInvoice({
-        id: 0,
-        invoiceNumber: generateInvoiceNumber(),
-        client: "",
-        pet: "",
-        items: [],
-        discount: 0,
-        total: 0,
-        date: new Date().toISOString().split('T')[0],
-        status: "Pending",
-      })
-      setPreviewMode(false)
-    } else {
-      alert("Please fill in all required fields and add at least one item.")
+  const filteredInvoices = invoices.filter(invoice => {
+    const searchLower = searchTerm.toLowerCase()
+    return (
+      invoice.pet.name.toLowerCase().includes(searchLower) ||
+      invoice.pet.client.name.toLowerCase().includes(searchLower) ||
+      invoice.status.toLowerCase().includes(searchLower) ||
+      formatCurrency(invoice.total).toLowerCase().includes(searchLower)
+    )
+  })
+
+  const handleInvoiceSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    const formData = new FormData(event.currentTarget)
+    
+    const items = Array.from(formData.getAll('items')).map(item => {
+      const parsedItem = JSON.parse(item as string)
+      return {
+        description: parsedItem.description,
+        quantity: parsedItem.quantity,
+        unit_price: parsedItem.unit_price
+      }
+    })
+    
+    const invoiceData = {
+      date: formData.get('date') as string,
+      total: parseFloat(formData.get('total') as string),
+      status: formData.get('status') as 'pending' | 'paid' | 'cancelled',
+      pet_id: parseInt(formData.get('pet_id') as string),
+      client_id: parseInt(formData.get('client_id') as string),
+    }
+
+    try {
+      if (selectedInvoice?.id) {
+        await updateInvoice(selectedInvoice.id, invoiceData, items)
+        toast.success('Invoice updated successfully')
+      } else {
+        await createInvoice(invoiceData, items)
+        toast.success('Invoice created successfully')
+      }
+      setSelectedInvoice(null)
+      setShowInvoiceForm(false)
+      await loadAllInvoices()
+    } catch (error) {
+      console.error('Error saving invoice:', error)
+      toast.error('Failed to save invoice')
     }
   }
 
   return (
-    <div className="space-y-8">
-      <h1 className="text-3xl font-bold">Billing</h1>
-      <Tabs defaultValue="invoices">
-        <TabsList>
-          <TabsTrigger value="invoices">Invoices</TabsTrigger>
-          <TabsTrigger value="create">Create Invoice</TabsTrigger>
-        </TabsList>
-        <TabsContent value="invoices">
-          <Card>
-            <CardHeader>
-              <CardTitle>Invoices</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Invoice Number</TableHead>
-                    <TableHead>Client</TableHead>
-                    <TableHead>Pet</TableHead>
-                    <TableHead>Total</TableHead>
-                    <TableHead>Date</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Action</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {invoices.map((invoice) => (
-                    <TableRow key={invoice.id}>
-                      <TableCell>{invoice.invoiceNumber}</TableCell>
-                      <TableCell>{invoice.client}</TableCell>
-                      <TableCell>{invoice.pet}</TableCell>
-                      <TableCell>${invoice.total.toFixed(2)}</TableCell>
-                      <TableCell>{invoice.date}</TableCell>
-                      <TableCell>{invoice.status}</TableCell>
-                      <TableCell>
-                        <Button variant="outline" size="sm">View</Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-        </TabsContent>
-        <TabsContent value="create">
-          <Card>
-            <CardHeader>
-              <CardTitle>Create New Invoice</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="invoiceNumber">Invoice Number</Label>
-                    <Input id="invoiceNumber" value={newInvoice.invoiceNumber} disabled />
-                  </div>
-                  <div>
-                    <Label htmlFor="date">Date</Label>
-                    <Input
-                      id="date"
-                      type="date"
-                      value={newInvoice.date}
-                      onChange={(e) => setNewInvoice({ ...newInvoice, date: e.target.value })}
-                    />
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="client">Client</Label>
-                    <Input
-                      id="client"
-                      value={newInvoice.client}
-                      onChange={(e) => setNewInvoice({ ...newInvoice, client: e.target.value })}
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="pet">Pet</Label>
-                    <Input
-                      id="pet"
-                      value={newInvoice.pet}
-                      onChange={(e) => setNewInvoice({ ...newInvoice, pet: e.target.value })}
-                    />
-                  </div>
-                </div>
-                <div>
-                  <h3 className="text-lg font-semibold mb-2">Items</h3>
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Description</TableHead>
-                        <TableHead>Quantity</TableHead>
-                        <TableHead>Unit Price</TableHead>
-                        <TableHead>Total</TableHead>
-                        <TableHead>Action</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {newInvoice.items.map((item) => (
-                        <TableRow key={item.id}>
-                          <TableCell>{item.description}</TableCell>
-                          <TableCell>{item.quantity}</TableCell>
-                          <TableCell>${item.unitPrice.toFixed(2)}</TableCell>
-                          <TableCell>${(item.quantity * item.unitPrice).toFixed(2)}</TableCell>
-                          <TableCell>
-                            <Button variant="destructive" size="sm" onClick={() => handleRemoveItem(item.id)}>Remove</Button>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                  <div className="grid grid-cols-4 gap-4 mt-4">
-                    <Input
-                      placeholder="Description"
-                      value={newItem.description}
-                      onChange={(e) => setNewItem({ ...newItem, description: e.target.value })}
-                    />
-                    <Input
-                      type="number"
-                      placeholder="Quantity"
-                      value={newItem.quantity}
-                      onChange={(e) => setNewItem({ ...newItem, quantity: parseInt(e.target.value) })}
-                    />
-                    <Input
-                      type="number"
-                      placeholder="Unit Price"
-                      value={newItem.unitPrice}
-                      onChange={(e) => setNewItem({ ...newItem, unitPrice: parseFloat(e.target.value) })}
-                    />
-                    <Button onClick={handleAddItem}>Add Item</Button>
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="discount">Discount (%)</Label>
-                    <Input
-                      id="discount"
-                      type="number"
-                      value={newInvoice.discount}
-                      onChange={(e) => setNewInvoice({ ...newInvoice, discount: parseFloat(e.target.value) })}
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="total">Total</Label>
-                    <Input
-                      id="total"
-                      value={`$${calculateTotal(newInvoice.items, newInvoice.discount).toFixed(2)}`}
-                      disabled
-                    />
-                  </div>
-                </div>
-                <div className="flex justify-end space-x-4">
-                  <Button variant="outline" onClick={() => setPreviewMode(true)}>Preview</Button>
-                  <Button onClick={handleAddInvoice}>Create Invoice</Button>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
-      {previewMode && (
-        <Dialog open={previewMode} onOpenChange={setPreviewMode}>
-          <DialogContent className="sm:max-w-[625px]">
+    <div className="container py-10">
+      <div className="flex justify-between items-center mb-8">
+        <h1 className="text-3xl font-bold">Billing & Invoices</h1>
+        <div className="flex items-center gap-4">
+          <Input
+            placeholder="Search invoices..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-[300px]"
+          />
+          <Button onClick={() => {
+            setSelectedInvoice(null)
+            setShowInvoiceForm(true)
+          }}>
+            <Plus className="mr-2 h-4 w-4" /> Create Invoice
+          </Button>
+        </div>
+      </div>
+
+      {loading ? (
+        <div className="text-center py-8">Loading invoices...</div>
+      ) : filteredInvoices.length === 0 ? (
+        <div className="text-center py-8">No invoices found.</div>
+      ) : (
+        <div className="rounded-md border">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Invoice #</TableHead>
+                <TableHead>Date</TableHead>
+                <TableHead>Pet</TableHead>
+                <TableHead>Owner</TableHead>
+                <TableHead>Total</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filteredInvoices.map((invoice) => (
+                <TableRow key={invoice.id}>
+                  <TableCell>#{invoice.id.toString().padStart(5, '0')}</TableCell>
+                  <TableCell>{formatDate(invoice.date)}</TableCell>
+                  <TableCell>{invoice.pet.name}</TableCell>
+                  <TableCell>{invoice.pet.client.name}</TableCell>
+                  <TableCell>{formatCurrency(invoice.total)}</TableCell>
+                  <TableCell>
+                    <Badge variant="secondary" className={getStatusColor(invoice.status)}>
+                      {invoice.status}
+                    </Badge>
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex justify-end gap-2">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => setViewingInvoice(invoice)}
+                        title="View Invoice"
+                      >
+                        <Eye className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => setSelectedInvoice(invoice)}
+                        title="Edit Invoice"
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            title="Delete Invoice"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Delete Invoice</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              Are you sure you want to delete this invoice? This action cannot be undone.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+                            <AlertDialogAction
+                              onClick={async () => {
+                                try {
+                                  await deleteInvoice(invoice.id)
+                                  toast.success('Invoice deleted successfully')
+                                } catch (error) {
+                                  console.error('Error deleting invoice:', error)
+                                  toast.error('Failed to delete invoice')
+                                }
+                              }}
+                            >
+                              Delete
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      )}
+
+      {showInvoiceForm && (
+        <InvoiceForm
+          invoice={selectedInvoice}
+          onClose={() => {
+            setSelectedInvoice(null)
+            setShowInvoiceForm(false)
+          }}
+          onSubmit={handleInvoiceSubmit}
+        />
+      )}
+
+      {viewingInvoice && (
+        <Dialog open={!!viewingInvoice} onOpenChange={() => setViewingInvoice(null)}>
+          <DialogContent>
             <DialogHeader>
-              <DialogTitle>Invoice Preview</DialogTitle>
+              <DialogTitle>Invoice #{viewingInvoice.id.toString().padStart(5, '0')}</DialogTitle>
             </DialogHeader>
             <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <strong>Invoice Number:</strong> {newInvoice.invoiceNumber}
-                </div>
-                <div>
-                  <strong>Date:</strong> {newInvoice.date}
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <strong>Client:</strong> {newInvoice.client}
-                </div>
-                <div>
-                  <strong>Pet:</strong> {newInvoice.pet}
-                </div>
-              </div>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Description</TableHead>
-                    <TableHead>Quantity</TableHead>
-                    <TableHead>Unit Price</TableHead>
-                    <TableHead>Total</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {newInvoice.items.map((item) => (
-                    <TableRow key={item.id}>
-                      <TableCell>{item.description}</TableCell>
-                      <TableCell>{item.quantity}</TableCell>
-                      <TableCell>${item.unitPrice.toFixed(2)}</TableCell>
-                      <TableCell>${(item.quantity * item.unitPrice).toFixed(2)}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <strong>Discount:</strong> {newInvoice.discount}%
-                </div>
-                <div>
-                  <strong>Total:</strong> ${calculateTotal(newInvoice.items, newInvoice.discount).toFixed(2)}
-                </div>
-              </div>
+              <p>Date: {formatDate(viewingInvoice.date)}</p>
+              <p>Pet: {viewingInvoice.pet.name}</p>
+              <p>Owner: {viewingInvoice.pet.client.name}</p>
+              <p>Total: {formatCurrency(viewingInvoice.total)}</p>
+              <p>Status: {viewingInvoice.status}</p>
             </div>
           </DialogContent>
         </Dialog>
@@ -358,4 +325,3 @@ export default function BillingPage() {
     </div>
   )
 }
-

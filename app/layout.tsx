@@ -1,40 +1,32 @@
-import './globals.css'
+import type { Metadata } from 'next'
 import { Inter } from 'next/font/google'
-import { Sidebar } from '../components/sidebar'
-import { createServerComponentClient } from '@supabase/auth-helpers-nextjs'
-import { cookies } from 'next/headers'
-import { supabase } from '@/lib/supabase'
+import './globals.css'
+import 'react-datepicker/dist/react-datepicker.css'
+import { Toaster } from 'sonner'
+import { Providers } from './providers'
+import { RootLayoutContent } from '@/components/layout/root-layout-content'
 
 const inter = Inter({ subsets: ['latin'] })
 
-export const metadata = {
-  title: 'Advanced Veterinary CRM',
-  description: 'Comprehensive Veterinary CRM with Advanced Features',
+export const metadata: Metadata = {
+  title: 'Vet Clinic',
+  description: 'Vet Clinic Management System',
 }
 
-export default async function RootLayout({
+export default function RootLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
-  const supabaseClient = createServerComponentClient({ cookies })
-  const { data: { session } } = await supabaseClient.auth.getSession()
-
-  console.log('Session in layout (createServerComponentClient):', session);
-
-  const { data: session2, error } = await supabase.auth.getSession()
-  console.log('Session in layout (supabase.auth.getSession()):', session2, error);
-
-
   return (
     <html lang="en">
       <body className={inter.className}>
-        <div className="flex h-screen">
-          <Sidebar session={session} />
-          <main className="flex-1 overflow-y-auto p-8">
+        <Providers>
+          <RootLayoutContent>
             {children}
-          </main>
-        </div>
+          </RootLayoutContent>
+          <Toaster />
+        </Providers>
       </body>
     </html>
   )
