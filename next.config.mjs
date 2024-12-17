@@ -3,6 +3,6 @@ const nextConfig = {// Warning: This allows production builds to successfully co
     // your project has ESLint errors.
     ignoreDuringBuilds: true,
   },
-  }
+  };
 
 export default nextConfig;
