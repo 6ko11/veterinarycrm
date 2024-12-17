@@ -442,8 +442,8 @@ export default function AppointmentsPage() {
               <DnDCalendar
                 localizer={localizer}
                 events={events}
-                startAccessor={(event: AppointmentType) => event.start}
-                endAccessor={(event: AppointmentType) => event.end}
+                startAccessor={(event) => (event as AppointmentType).start}
+                endAccessor={(event) => (event as AppointmentType).end}
                 onSelectSlot={handleSelectSlot}
                 selectable
                 resizable
@@ -473,8 +473,8 @@ export default function AppointmentsPage() {
               <DnDCalendar
                 localizer={localizer}
                 events={events}
-                startAccessor={(event: AppointmentType) => event.start}
-                endAccessor={(event: AppointmentType) => event.end}
+                startAccessor={(event) => (event as AppointmentType).start}
+                endAccessor={(event) => (event as AppointmentType).end}
                 onSelectSlot={handleSelectSlot}
                 selectable
                 resizable
@@ -504,8 +504,8 @@ export default function AppointmentsPage() {
               <DnDCalendar
                 localizer={localizer}
                 events={events}
-                startAccessor={(event: AppointmentType) => event.start}
-                endAccessor={(event: AppointmentType) => event.end}
+                startAccessor={(event) => (event as AppointmentType).start}
+                endAccessor={(event) => (event as AppointmentType).end}
                 onSelectSlot={handleSelectSlot}
                 selectable
                 resizable
