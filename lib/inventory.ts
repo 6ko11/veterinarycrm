@@ -1,7 +1,7 @@
 import { supabase } from './supabase'
 
 export interface InventoryItem {
-  id: string
+  id: string  // This is a UUID string
   name: string
   type: 'medication' | 'vaccine' | 'supply'
   description?: string | null
@@ -16,7 +16,7 @@ export interface InventoryItem {
   storage_conditions?: string | null
   created_at: string
   updated_at: string
-  user_id: string
+  user_id: string  // This is a UUID string
 }
 
 export async function fetchInventoryItems() {
@@ -29,8 +29,7 @@ export async function fetchInventoryItems() {
     const { data, error } = await supabase
       .from('inventory_items')
       .select('*')
-      .eq('user_id', user.id)
-      .order('name')
+      .order('created_at', { ascending: false })
 
     if (error) {
       console.error('Supabase error:', error)
@@ -50,6 +49,9 @@ export async function fetchInventoryItems() {
 
 export async function searchInventory(query: string) {
   try {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) throw new Error('Not authenticated')
+
     const { data, error } = await supabase
       .from('inventory_items')
       .select('*')
@@ -88,7 +90,12 @@ export async function addInventoryItem(item: Omit<InventoryItem, 'id' | 'created
       console.error('Supabase error:', error)
       throw error
     }
-    return data
+
+    if (!data) {
+      throw new Error('No data returned from insert')
+    }
+
+    return data as InventoryItem
   } catch (error) {
     console.error('Error adding inventory item:', error)
     throw error
@@ -100,14 +107,9 @@ export async function updateInventoryItem(id: string, item: Partial<InventoryIte
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) throw new Error('User not authenticated')
 
-    // Clean up undefined values to null
-    const cleanedItem = Object.fromEntries(
-      Object.entries(item).map(([key, value]) => [key, value === undefined ? null : value])
-    )
-
     const { data, error } = await supabase
       .from('inventory_items')
-      .update({ ...cleanedItem, user_id: user.id })
+      .update(item)
       .eq('id', id)
       .select()
       .single()
@@ -116,7 +118,7 @@ export async function updateInventoryItem(id: string, item: Partial<InventoryIte
       console.error('Supabase error:', error)
       throw error
     }
-    return data
+    return data as InventoryItem
   } catch (error) {
     console.error('Error updating inventory item:', error)
     throw error
@@ -125,6 +127,9 @@ export async function updateInventoryItem(id: string, item: Partial<InventoryIte
 
 export async function deleteInventoryItem(id: string) {
   try {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) throw new Error('User not authenticated')
+
     const { error } = await supabase
       .from('inventory_items')
       .delete()
