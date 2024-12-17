@@ -460,7 +460,7 @@ export default function AppointmentsPage() {
                 timeslots={4}
                 formats={{
                   eventTimeRangeFormat: ({ start, end }, culture, localizer) =>
-                    `${localizer.format(start, 'HH:mm', culture)} - ${localizer.format(end, 'HH:mm', culture)}`,
+                    `${localizer!.format(start, 'HH:mm', culture)} - ${localizer!.format(end, 'HH:mm', culture)}`,
                 }}
                 min={new Date(0, 0, 0, 8, 0, 0)}
                 max={new Date(0, 0, 0, 20, 0, 0)}
@@ -490,7 +490,7 @@ export default function AppointmentsPage() {
                 timeslots={4}
                 formats={{
                   eventTimeRangeFormat: ({ start, end }, culture, localizer) =>
-                    `${localizer.format(start, 'HH:mm', culture)} - ${localizer.format(end, 'HH:mm', culture)}`,
+                    `${localizer!.format(start, 'HH:mm', culture)} - ${localizer!.format(end, 'HH:mm', culture)}`,
                 }}
                 min={new Date(0, 0, 0, 8, 0, 0)}
                 max={new Date(0, 0, 0, 20, 0, 0)}
@@ -520,7 +520,7 @@ export default function AppointmentsPage() {
                 timeslots={4}
                 formats={{
                   eventTimeRangeFormat: ({ start, end }, culture, localizer) =>
-                    `${localizer.format(start, 'HH:mm', culture)} - ${localizer.format(end, 'HH:mm', culture)}`,
+                    `${localizer!.format(start, 'HH:mm', culture)} - ${localizer!.format(end, 'HH:mm', culture)}`,
                 }}
                 min={new Date(0, 0, 0, 8, 0, 0)}
                 max={new Date(0, 0, 0, 20, 0, 0)}
