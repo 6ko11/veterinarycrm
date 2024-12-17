@@ -21,15 +21,26 @@ export interface InventoryItem {
 
 export async function fetchInventoryItems() {
   try {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) {
+      throw new Error('Not authenticated')
+    }
+
     const { data, error } = await supabase
       .from('inventory_items')
       .select('*')
+      .eq('user_id', user.id)
       .order('name')
 
     if (error) {
       console.error('Supabase error:', error)
       throw error
     }
+
+    if (!data) {
+      return []
+    }
+
     return data as InventoryItem[]
   } catch (error) {
     console.error('Error fetching inventory items:', error)

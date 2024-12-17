@@ -77,11 +77,19 @@ export default function InventoryPage() {
   const loadInventory = async () => {
     try {
       setLoading(true)
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) {
+        toast.error('Please sign in to view inventory')
+        setLoading(false)
+        return
+      }
+
       const items = await fetchInventoryItems()
       setItems(items)
     } catch (error) {
       console.error('Error loading inventory:', error)
-      toast.error('Failed to load inventory')
+      toast.error('Failed to load inventory items. Please try refreshing the page.')
+      setItems([])
     } finally {
       setLoading(false)
     }
